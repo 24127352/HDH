@@ -1,0 +1,222 @@
+diff --git a/Makefile b/Makefile
+index 74e454f..e03ba82 100644
+--- a/Makefile
++++ b/Makefile
+@@ -194,6 +194,8 @@ UPROGS=\
+ 	$U/_grind\
+ 	$U/_wc\
+ 	$U/_zombie\
++	$U/_testHello\
++	$U/_trace\
+ 
+ 
+ 
+diff --git a/kernel/proc.c b/kernel/proc.c
+index 130d9ce..c8a0dd2 100644
+--- a/kernel/proc.c
++++ b/kernel/proc.c
+@@ -311,6 +311,7 @@ fork(void)
+   safestrcpy(np->name, p->name, sizeof(p->name));
+ 
+   pid = np->pid;
++  np->trace_mask = p->trace_mask; // copy trace mask from parent to child (for trace system call)
+ 
+   release(&np->lock);
+ 
+diff --git a/kernel/proc.h b/kernel/proc.h
+index d021857..a8668d6 100644
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -91,6 +91,7 @@ struct proc {
+   int killed;                  // If non-zero, have been killed
+   int xstate;                  // Exit status to be returned to parent's wait
+   int pid;                     // Process ID
++  int trace_mask;              // Mask for tracing system calls (for trace system call)
+ 
+   // wait_lock must be held when using this:
+   struct proc *parent;         // Parent process
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index ed65409..e22b69e 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -7,6 +7,32 @@
+ #include "syscall.h"
+ #include "defs.h"
+ 
++// syscall names array for tracing system calls (trace system call)
++char *syscallnames[] = {
++  [SYS_fork] "fork",
++  [SYS_exit] "exit",
++  [SYS_wait] "wait",
++  [SYS_pipe] "pipe",
++  [SYS_read] "read",
++  [SYS_kill] "kill",
++  [SYS_exec] "exec",
++  [SYS_fstat] "fstat",
++  [SYS_chdir] "chdir",
++  [SYS_dup] "dup",
++  [SYS_getpid] "getpid",
++  [SYS_sbrk] "sbrk",
++  [SYS_sleep] "sleep",
++  [SYS_uptime] "uptime",
++  [SYS_open] "open",
++  [SYS_write] "write",
++  [SYS_mknod] "mknod",
++  [SYS_unlink] "unlink",
++  [SYS_link] "link",
++  [SYS_mkdir] "mkdir",
++  [SYS_close] "close",
++  [SYS_trace] "trace",
++};
++
+ // Fetch the uint64 at addr from the current process.
+ int
+ fetchaddr(uint64 addr, uint64 *ip)
+@@ -101,6 +127,8 @@ extern uint64 sys_unlink(void);
+ extern uint64 sys_link(void);
+ extern uint64 sys_mkdir(void);
+ extern uint64 sys_close(void);
++extern uint64 sys_Hello(void); // prototype for new system call (Hello)
++extern uint64 sys_trace(void); // prototype for new system call (trace)
+ 
+ // An array mapping syscall numbers from syscall.h
+ // to the function that handles the system call.
+@@ -126,6 +154,8 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_Hello] = sys_Hello, // add new system call to the syscall array (Hello)
++[SYS_trace] = sys_trace, // add new system call to the syscall array (trace)
+ };
+ 
+ void
+@@ -139,6 +169,14 @@ syscall(void)
+     // Use num to lookup the system call function for num, call it,
+     // and store its return value in p->trapframe->a0
+     p->trapframe->a0 = syscalls[num]();
++
++    // If tracing is enabled for this system call, print the name of the system call 
++    if (p->trace_mask & (1 << num)) {
++    printf("%d: syscall %s -> %ld\n",
++           p->pid,
++           syscallnames[num],
++           p->trapframe->a0);
++    }
+   } else {
+     printf("%d %s: unknown sys call %d\n",
+             p->pid, p->name, num);
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index bc5f356..28046c9 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -20,3 +20,5 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_Hello  22 // define new system call number for Hello 
++#define SYS_trace  23 // define new system call number for trace 
+\ No newline at end of file
+diff --git a/kernel/sysinfo.h b/kernel/sysinfo.h
+index fb878e6..e19f005 100644
+--- a/kernel/sysinfo.h
++++ b/kernel/sysinfo.h
+@@ -1,4 +1,4 @@
+ struct sysinfo {
+-  uint64 freemem;   // amount of free memory (bytes)
+-  uint64 nproc;     // number of process
++  unsigned long freemem;   // amount of free memory (bytes)
++  unsigned long nproc;     // number of process
+ };
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index 3b4d5bd..214c25c 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -91,3 +91,18 @@ sys_uptime(void)
+   release(&tickslock);
+   return xticks;
+ }
++
++uint64 sys_Hello(void) // implementation of new system call (Hello)
++{
++  printf("Hello, World!\n");
++  return 0;
++}
++
++uint64 sys_trace(void) // implementation of new system call (trace)
++{
++  int mask;
++  
++  argint(0, &mask);
++  myproc()->trace_mask = mask; // set the trace mask for the current process
++  return 0;
++}
+\ No newline at end of file
+diff --git a/user/testHello.c b/user/testHello.c
+new file mode 100644
+index 0000000..ccf5a26
+--- /dev/null
++++ b/user/testHello.c
+@@ -0,0 +1,7 @@
++#include "user.h"
++
++int main()
++{
++  Hello(); // call the new system call (Hello)
++  exit(0);
++}
+\ No newline at end of file
+diff --git a/user/ulib.c b/user/ulib.c
+index 0064846..3134caa 100644
+--- a/user/ulib.c
++++ b/user/ulib.c
+@@ -2,6 +2,7 @@
+ #include "kernel/stat.h"
+ #include "kernel/fcntl.h"
+ #include "user/user.h"
++#include "user.h"
+ 
+ //
+ // wrapper so that it's OK if main() does not call exit().
+diff --git a/user/user.h b/user/user.h
+index f16fe27..fce9a6b 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -22,6 +22,10 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int Hello(void); // prototype for new system call (Hello)
++int trace(int); // prototype for new system call (trace)
++
++// change unint to unsigned int below
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+@@ -32,12 +36,12 @@ int strcmp(const char*, const char*);
+ void fprintf(int, const char*, ...) __attribute__ ((format (printf, 2, 3)));
+ void printf(const char*, ...) __attribute__ ((format (printf, 1, 2)));
+ char* gets(char*, int max);
+-uint strlen(const char*);
+-void* memset(void*, int, uint);
++unsigned int strlen(const char*);
++void* memset(void*, int, unsigned int);
+ int atoi(const char*);
+-int memcmp(const void *, const void *, uint);
+-void *memcpy(void *, const void *, uint);
++int memcmp(const void *, const void *, unsigned int);
++void *memcpy(void *, const void *, unsigned int);
+ 
+ // umalloc.c
+-void* malloc(uint);
++void* malloc(unsigned int);
+ void free(void*);
+diff --git a/user/usys.pl b/user/usys.pl
+index 01e426e..c4f28ae 100755
+--- a/user/usys.pl
++++ b/user/usys.pl
+@@ -36,3 +36,5 @@ entry("getpid");
+ entry("sbrk");
+ entry("sleep");
+ entry("uptime");
++entry("Hello"); # add new system call entry for Hello (testing)
++entry("trace"); # add new system call entry for trace (testing)
