@@ -91,3 +91,9 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64 sys_Hello(void) // implementation of new system call (Hello)
+{
+  printf("Hello, World!\n");
+  return 0;
+}
