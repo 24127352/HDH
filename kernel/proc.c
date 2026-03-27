@@ -311,6 +311,7 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+  np->trace_mask = p->trace_mask; // copy trace mask from parent to child (for trace system call)
 
   release(&np->lock);
 

@@ -97,3 +97,12 @@ uint64 sys_Hello(void) // implementation of new system call (Hello)
   printf("Hello, World!\n");
   return 0;
 }
+
+uint64 sys_trace(void) // implementation of new system call (trace)
+{
+  int mask;
+  
+  argint(0, &mask);
+  myproc()->trace_mask = mask; // set the trace mask for the current process
+  return 0;
+}

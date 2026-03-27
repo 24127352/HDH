@@ -23,6 +23,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int Hello(void); // prototype for new system call (Hello)
+int trace(int); // prototype for new system call (trace)
 
 // change unint to unsigned int below
 
