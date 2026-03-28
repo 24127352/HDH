@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -104,5 +105,28 @@ uint64 sys_trace(void) // implementation of new system call (trace)
   
   argint(0, &mask);
   myproc()->trace_mask = mask; // set the trace mask for the current process
+  return 0;
+}
+
+// implementation of sysinfo system call
+uint64
+sys_sysinfo(void)
+{
+  struct sysinfo info;
+  uint64 addr;
+
+  // get user pointer argument
+  argaddr(0, &addr);
+
+  // collect system metrics
+  info.freemem = count_freemem();
+  info.nproc = count_nproc();
+  info.nopenfiles = count_nopenfiles();
+
+  // copy struct to user space
+  struct proc *p = myproc();
+  if(copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+    return -1;
+
   return 0;
 }

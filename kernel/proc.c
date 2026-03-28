@@ -694,3 +694,22 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+// count processes that are not UNUSED.
+unsigned long
+count_nproc(void)
+{
+  struct proc *p;
+  unsigned long count = 0;
+  
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock); // protect process state
+    if(p->state != UNUSED) {
+      count++;
+    }
+    release(&p->lock);
+  }
+  
+  return count;
+}

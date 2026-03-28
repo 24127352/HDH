@@ -38,3 +38,4 @@ entry("sleep");
 entry("uptime");
 entry("Hello"); # add new system call entry for Hello (testing)
 entry("trace"); # add new system call entry for trace (testing)
+entry("sysinfo"); # generate stub for sysinfo

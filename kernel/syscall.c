@@ -31,6 +31,7 @@ char *syscallnames[] = {
   [SYS_mkdir] "mkdir",
   [SYS_close] "close",
   [SYS_trace] "trace",
+  [SYS_sysinfo] "sysinfo",
 };
 
 // Fetch the uint64 at addr from the current process.
@@ -129,6 +130,7 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_Hello(void); // prototype for new system call (Hello)
 extern uint64 sys_trace(void); // prototype for new system call (trace)
+extern uint64 sys_sysinfo(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -156,6 +158,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_Hello] = sys_Hello, // add new system call to the syscall array (Hello)
 [SYS_trace] = sys_trace, // add new system call to the syscall array (trace)
+[SYS_sysinfo] sys_sysinfo,
 };
 
 void

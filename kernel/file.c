@@ -180,3 +180,20 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+// count total open files across the system.
+unsigned long
+count_nopenfiles(void)
+{
+  struct file *f;
+  unsigned long count = 0;
+  
+  acquire(&ftable.lock); // protect the global file table
+  for(f = ftable.file; f < ftable.file + NFILE; f++) {
+    if(f->ref > 0) { // ref > 0 means the file is open
+      count++;
+    }
+  }
+  release(&ftable.lock);
+  
+  return count;
+}
