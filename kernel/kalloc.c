@@ -91,3 +91,20 @@ kalloc(void)
   return (void*)r;
 }
 
+// count free physical memory in bytes.
+unsigned long
+count_freemem(void)
+{
+  struct run *r;
+  unsigned long count = 0;
+  
+  acquire(&kmem.lock); // protect the freelist
+  r = kmem.freelist;
+  while(r) {
+    count++;
+    r = r->next;
+  }
+  release(&kmem.lock);
+  
+  return count * PGSIZE; // convert pages to bytes
+}

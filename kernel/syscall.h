@@ -22,3 +22,4 @@
 #define SYS_close  21
 #define SYS_Hello  22 // define new system call number for Hello 
 #define SYS_trace  23 // define new system call number for trace 
+#define SYS_sysinfo 24

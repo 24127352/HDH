@@ -1,3 +1,8 @@
+struct sysinfo;
+
+int trace(int);
+int sysinfo(struct sysinfo *); // prototype for sysinfo
+
 struct stat;
 
 // system calls
