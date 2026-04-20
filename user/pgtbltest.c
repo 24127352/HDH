@@ -7,7 +7,7 @@
 #define N (8 * (1 << 20))
 
 void print_pgtbl();
-void print_kpgtbl();
+void print_vmprint();
 void ugetpid_test();
 void superpg_test();
 
@@ -16,7 +16,7 @@ main(int argc, char *argv[])
 {
   print_pgtbl();
   ugetpid_test();
-  print_kpgtbl();
+  print_vmprint();
   superpg_test();
   printf("pgtbltest: all tests succeeded\n");
   exit(0);
@@ -76,11 +76,11 @@ ugetpid_test()
 }
 
 void
-print_kpgtbl()
+print_vmprint()
 {
-  printf("print_kpgtbl starting\n");
-  kpgtbl();
-  printf("print_kpgtbl: OK\n");
+  printf("print_vmprint starting\n");
+  vmprint();
+  printf("print_vmprint: OK\n");
 }
 
 

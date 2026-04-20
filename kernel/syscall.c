@@ -109,8 +109,10 @@ extern uint64 sys_send(void);
 extern uint64 sys_recv(void);
 #endif
 #ifdef LAB_PGTBL
+// for when the user want to print the page table
+extern uint64 sys_vmprint(void);
+
 extern uint64 sys_pgpte(void);
-extern uint64 sys_kpgtbl(void);
 #endif
 
 // An array mapping syscall numbers from syscall.h
@@ -137,6 +139,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+
 #ifdef LAB_NET
 [SYS_bind] sys_bind,
 [SYS_unbind] sys_unbind,
@@ -144,8 +147,10 @@ static uint64 (*syscalls[])(void) = {
 [SYS_recv] sys_recv,
 #endif
 #ifdef LAB_PGTBL
+// for mapping the system call number to the function that print the page table
+[SYS_vmprint] sys_vmprint,
+
 [SYS_pgpte] sys_pgpte,
-[SYS_kpgtbl] sys_kpgtbl,
 #endif
 };
 

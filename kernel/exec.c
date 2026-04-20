@@ -128,6 +128,10 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
+  // Print the page table for debugging. (LAB_PGTBL)
+  // Page table is printed every time exec is called instead of only when the user want to
+  // vmprint(p->pagetable); 
+
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

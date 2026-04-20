@@ -34,4 +34,4 @@
 #define SYS_send      31
 #define SYS_recv      32
 #define SYS_pgpte     33
-#define SYS_kpgtbl    34
+#define SYS_vmprint   34 // for when the user want to print the page table

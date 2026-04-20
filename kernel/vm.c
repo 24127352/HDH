@@ -486,12 +486,42 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
-
 #ifdef LAB_PGTBL
+// For debugging: print a page table
+
+// Recursively print the page tables
+static void
+vmprint_rec(pagetable_t pagetable, int depth)
+{
+  // there 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+
+    // IF an entry is invalid, skip it.
+    if((pte & PTE_V) == 0)
+      continue;
+
+    // indents are used to indicate the depth of the page table.
+    for(int j = 0; j < depth; j++)
+      printf(" ..");
+
+    // prints index, PTE, and physical address.
+    printf("%d: pte %p pa %p\n", i, (void*) pte, (void*) PTE2PA(pte));
+
+    // checks if this is a leaf PTE (one that maps a page).  If not, recursively prints the next level page table.
+    if((pte & (PTE_R | PTE_W | PTE_X)) == 0){
+      pagetable_t child = (pagetable_t)PTE2PA(pte);
+      vmprint_rec(child, depth + 1);
+    }
+  }
+}
+
 void
 vmprint(pagetable_t pagetable) {
-  // your code here
+  printf("page table %p\n", pagetable);
+  vmprint_rec(pagetable, 1);
 }
+
 #endif
 
 

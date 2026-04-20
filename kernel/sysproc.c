@@ -90,12 +90,11 @@ sys_pgpte(void)
 #endif
 
 #ifdef LAB_PGTBL
-int
-sys_kpgtbl(void)
+// For debugging: print the page table of the current process.
+uint64
+sys_vmprint(void)
 {
-  struct proc *p;  
-
-  p = myproc();
+  struct proc *p = myproc();
   vmprint(p->pagetable);
   return 0;
 }

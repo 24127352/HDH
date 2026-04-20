@@ -2,6 +2,8 @@
 typedef unsigned long size_t;
 typedef long int off_t;
 #endif
+#include "kernel/types.h"
+
 struct stat;
 
 // system calls
@@ -35,7 +37,9 @@ int recv(uint32, uint32*, uint32*, char *, uint32);
 #ifdef LAB_PGTBL
 int ugetpid(void);
 uint64 pgpte(void*);
-void kpgtbl(void);
+
+// for when the user want to print the page table
+uint64 vmprint(void);
 #endif
 
 // ulib.c
