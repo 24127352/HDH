@@ -42,3 +42,4 @@ entry("send");
 entry("recv");
 entry("pgpte");
 entry("vmprint");
+entry("pgaccess");

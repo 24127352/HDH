@@ -113,6 +113,8 @@ extern uint64 sys_recv(void);
 extern uint64 sys_vmprint(void);
 
 extern uint64 sys_pgpte(void);
+
+extern uint64 sys_pgaccess(void);
 #endif
 
 // An array mapping syscall numbers from syscall.h
@@ -151,6 +153,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_vmprint] sys_vmprint,
 
 [SYS_pgpte] sys_pgpte,
+
+[SYS_pgaccess] sys_pgaccess,
 #endif
 };
 

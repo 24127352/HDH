@@ -40,6 +40,8 @@ uint64 pgpte(void*);
 
 // for when the user want to print the page table
 uint64 vmprint(void);
+
+int pgaccess(void*, int, void*);
 #endif
 
 // ulib.c

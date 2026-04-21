@@ -100,6 +100,46 @@ sys_vmprint(void)
 }
 #endif
 
+#ifdef LAB_PGTBL
+uint64
+sys_pgaccess(void)
+{
+  uint64 base_va;
+  int num_pages;
+  uint64 user_mask_addr;
+
+  // Parse arguments
+  argaddr(0, &base_va);
+  argint(1, &num_pages);
+  argaddr(2, &user_mask_addr);
+
+  // Max limit is 64 pages 
+  if(num_pages < 0 || num_pages > 64) 
+    return -1;
+
+  uint64 mask = 0; 
+  struct proc *p = myproc();
+
+  for(int i = 0; i < num_pages; i++){
+    uint64 va = base_va + i * PGSIZE;
+    
+    // Get PTE without allocation
+    pte_t *pte = walk(p->pagetable, va, 0); 
+
+    // Check valid and access bit
+    if(pte != 0 && (*pte & PTE_V) && (*pte & PTE_A)) {
+      mask |= (1L << i); 
+      *pte &= ~PTE_A; // Clear access bit
+    }
+  }
+
+  // Copy bitmask to user space
+  if(copyout(p->pagetable, user_mask_addr, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+
+  return 0;
+}
+#endif  
 
 uint64
 sys_kill(void)
