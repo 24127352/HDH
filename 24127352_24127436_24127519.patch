@@ -1,0 +1,332 @@
+diff --git a/Makefile b/Makefile
+index 74e454f..e82dc74 100644
+--- a/Makefile
++++ b/Makefile
+@@ -194,6 +194,7 @@ UPROGS=\
+ 	$U/_grind\
+ 	$U/_wc\
+ 	$U/_zombie\
++	$U/_vmprint\
+ 
+ 
+ 
+diff --git a/kernel/exec.c b/kernel/exec.c
+index 6d7c452..f8119be 100644
+--- a/kernel/exec.c
++++ b/kernel/exec.c
+@@ -128,6 +128,10 @@ exec(char *path, char **argv)
+   p->trapframe->sp = sp; // initial stack pointer
+   proc_freepagetable(oldpagetable, oldsz);
+ 
++  // Print the page table for debugging. (LAB_PGTBL)
++  // Page table is printed every time exec is called instead of only when the user want to
++  // vmprint(p->pagetable); 
++
+   return argc; // this ends up in a0, the first argument to main(argc, argv)
+ 
+  bad:
+diff --git a/kernel/riscv.h b/kernel/riscv.h
+index 6cfff1e..9bba9ee 100644
+--- a/kernel/riscv.h
++++ b/kernel/riscv.h
+@@ -375,7 +375,7 @@ typedef uint64 *pagetable_t; // 512 PTEs
+ #define PTE_W (1L << 2)
+ #define PTE_X (1L << 3)
+ #define PTE_U (1L << 4) // user can access
+-
++#define PTE_A (1L << 6) // Access bit
+ 
+ 
+ #if defined(LAB_MMAP) || defined(LAB_PGTBL)
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index 4aea542..ac5ecf3 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -109,8 +109,12 @@ extern uint64 sys_send(void);
+ extern uint64 sys_recv(void);
+ #endif
+ #ifdef LAB_PGTBL
++// for when the user want to print the page table
++extern uint64 sys_vmprint(void);
++
+ extern uint64 sys_pgpte(void);
+-extern uint64 sys_kpgtbl(void);
++
++extern uint64 sys_pgaccess(void);
+ #endif
+ 
+ // An array mapping syscall numbers from syscall.h
+@@ -137,6 +141,7 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++
+ #ifdef LAB_NET
+ [SYS_bind] sys_bind,
+ [SYS_unbind] sys_unbind,
+@@ -144,8 +149,12 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_recv] sys_recv,
+ #endif
+ #ifdef LAB_PGTBL
++// for mapping the system call number to the function that print the page table
++[SYS_vmprint] sys_vmprint,
++
+ [SYS_pgpte] sys_pgpte,
+-[SYS_kpgtbl] sys_kpgtbl,
++
++[SYS_pgaccess] sys_pgaccess,
+ #endif
+ };
+ 
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index a122272..82a106f 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -34,4 +34,5 @@
+ #define SYS_send      31
+ #define SYS_recv      32
+ #define SYS_pgpte     33
+-#define SYS_kpgtbl    34
++#define SYS_vmprint   34 // for when the user want to print the page table
++#define SYS_pgaccess  35
+\ No newline at end of file
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index d9b7f9c..53bc704 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -90,17 +90,56 @@ sys_pgpte(void)
+ #endif
+ 
+ #ifdef LAB_PGTBL
+-int
+-sys_kpgtbl(void)
++// For debugging: print the page table of the current process.
++uint64
++sys_vmprint(void)
+ {
+-  struct proc *p;  
+-
+-  p = myproc();
++  struct proc *p = myproc();
+   vmprint(p->pagetable);
+   return 0;
+ }
+ #endif
+ 
++#ifdef LAB_PGTBL
++uint64
++sys_pgaccess(void)
++{
++  uint64 base_va;
++  int num_pages;
++  uint64 user_mask_addr;
++
++  // Parse arguments
++  argaddr(0, &base_va);
++  argint(1, &num_pages);
++  argaddr(2, &user_mask_addr);
++
++  // Max limit is 64 pages 
++  if(num_pages < 0 || num_pages > 64) 
++    return -1;
++
++  uint64 mask = 0; 
++  struct proc *p = myproc();
++
++  for(int i = 0; i < num_pages; i++){
++    uint64 va = base_va + i * PGSIZE;
++    
++    // Get PTE without allocation
++    pte_t *pte = walk(p->pagetable, va, 0); 
++
++    // Check valid and access bit
++    if(pte != 0 && (*pte & PTE_V) && (*pte & PTE_A)) {
++      mask |= (1L << i); 
++      *pte &= ~PTE_A; // Clear access bit
++    }
++  }
++
++  // Copy bitmask to user space
++  if(copyout(p->pagetable, user_mask_addr, (char *)&mask, sizeof(mask)) < 0)
++    return -1;
++
++  return 0;
++}
++#endif  
+ 
+ uint64
+ sys_kill(void)
+diff --git a/kernel/vm.c b/kernel/vm.c
+index 7f388fe..a8100c8 100644
+--- a/kernel/vm.c
++++ b/kernel/vm.c
+@@ -486,12 +486,42 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
+   }
+ }
+ 
+-
+ #ifdef LAB_PGTBL
++// For debugging: print a page table
++
++// Recursively print the page tables
++static void
++vmprint_rec(pagetable_t pagetable, int depth)
++{
++  // there 512 PTEs in a page table.
++  for(int i = 0; i < 512; i++){
++    pte_t pte = pagetable[i];
++
++    // IF an entry is invalid, skip it.
++    if((pte & PTE_V) == 0)
++      continue;
++
++    // indents are used to indicate the depth of the page table.
++    for(int j = 0; j < depth; j++)
++      printf(" ..");
++
++    // prints index, PTE, and physical address.
++    printf("%d: pte %p pa %p\n", i, (void*) pte, (void*) PTE2PA(pte));
++
++    // checks if this is a leaf PTE (one that maps a page).  If not, recursively prints the next level page table.
++    if((pte & (PTE_R | PTE_W | PTE_X)) == 0){
++      pagetable_t child = (pagetable_t)PTE2PA(pte);
++      vmprint_rec(child, depth + 1);
++    }
++  }
++}
++
+ void
+ vmprint(pagetable_t pagetable) {
+-  // your code here
++  printf("page table %p\n", pagetable);
++  vmprint_rec(pagetable, 1);
+ }
++
+ #endif
+ 
+ 
+diff --git a/user/pgtbltest.c b/user/pgtbltest.c
+index cde6e03..93f8027 100644
+--- a/user/pgtbltest.c
++++ b/user/pgtbltest.c
+@@ -7,17 +7,20 @@
+ #define N (8 * (1 << 20))
+ 
+ void print_pgtbl();
+-void print_kpgtbl();
++void print_vmprint();
+ void ugetpid_test();
+ void superpg_test();
++void pgaccess_test();
+ 
+ int
+ main(int argc, char *argv[])
+ {
+   print_pgtbl();
+-  ugetpid_test();
+-  print_kpgtbl();
+-  superpg_test();
++  // ugetpid_test();
++  print_vmprint();
++  // superpg_test();
++  pgaccess_test();
++  
+   printf("pgtbltest: all tests succeeded\n");
+   exit(0);
+ }
+@@ -76,11 +79,11 @@ ugetpid_test()
+ }
+ 
+ void
+-print_kpgtbl()
++print_vmprint()
+ {
+-  printf("print_kpgtbl starting\n");
+-  kpgtbl();
+-  printf("print_kpgtbl: OK\n");
++  printf("print_vmprint starting\n");
++  vmprint();
++  printf("print_vmprint: OK\n");
+ }
+ 
+ 
+@@ -140,3 +143,24 @@ superpg_test()
+   }
+   printf("superpg_test: OK\n");  
+ }
++
++void
++pgaccess_test()
++{
++  char *buf;
++  unsigned int abits;
++  printf("pgaccess_test starting\n");
++  testname = "pgaccess_test";
++  buf = malloc(32 * PGSIZE);
++  if (pgaccess(buf, 32, &abits) < 0)
++    err("pgaccess failed");
++  buf[PGSIZE * 1] += 1;
++  buf[PGSIZE * 2] += 1;
++  buf[PGSIZE * 30] += 1;
++  if (pgaccess(buf, 32, &abits) < 0)
++    err("pgaccess failed");
++  if (abits != ((1 << 1) | (1 << 2) | (1 << 30)))
++    err("incorrect access bits set");
++  free(buf);
++  printf("pgaccess_test: OK\n");
++}
+\ No newline at end of file
+diff --git a/user/user.h b/user/user.h
+index b91fd89..ff6f561 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -2,6 +2,8 @@
+ typedef unsigned long size_t;
+ typedef long int off_t;
+ #endif
++#include "kernel/types.h"
++
+ struct stat;
+ 
+ // system calls
+@@ -35,7 +37,11 @@ int recv(uint32, uint32*, uint32*, char *, uint32);
+ #ifdef LAB_PGTBL
+ int ugetpid(void);
+ uint64 pgpte(void*);
+-void kpgtbl(void);
++
++// for when the user want to print the page table
++uint64 vmprint(void);
++
++int pgaccess(void*, int, void*);
+ #endif
+ 
+ // ulib.c
+diff --git a/user/usys.pl b/user/usys.pl
+index 2c19fa6..fbce74d 100755
+--- a/user/usys.pl
++++ b/user/usys.pl
+@@ -41,4 +41,5 @@ entry("unbind");
+ entry("send");
+ entry("recv");
+ entry("pgpte");
+-entry("kpgtbl");
++entry("vmprint");
++entry("pgaccess");
+\ No newline at end of file
+diff --git a/user/vmprint.c b/user/vmprint.c
+new file mode 100644
+index 0000000..2d487fd
+--- /dev/null
++++ b/user/vmprint.c
+@@ -0,0 +1,9 @@
++#include "kernel/types.h"
++#include "user/user.h"
++
++int
++main(void)
++{
++  vmprint();
++  exit(0);
++}
+\ No newline at end of file
